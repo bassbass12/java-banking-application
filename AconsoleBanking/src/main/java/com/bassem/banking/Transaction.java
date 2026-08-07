@@ -1,5 +1,5 @@
 package com.bassem.banking;
-import java.math.BigDecimal
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public class Transaction {
