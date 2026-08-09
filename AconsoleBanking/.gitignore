@@ -36,3 +36,9 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+# Application configuration / secrets
+src/main/resources/application.properties
+
+# Compiled files
+bin/

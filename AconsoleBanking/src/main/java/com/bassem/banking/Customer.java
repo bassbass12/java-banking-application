@@ -6,7 +6,7 @@ public class Customer {
     private String name;
     private String email;
     private String passwordHash;
-    private List<BankAccount> accounts;
+    private List<BankAccount> accounts=new ArrayList<>();
    public Customer(){
 
    }

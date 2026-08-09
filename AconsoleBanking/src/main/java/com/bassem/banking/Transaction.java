@@ -8,6 +8,7 @@ public class Transaction {
     private LocalDateTime date;
     private TransactionType type;
     private BigDecimal resultingBalance;
+    private BankAccount account;
     public Transaction(){
 
     }
@@ -62,7 +63,13 @@ public class Transaction {
         this.resultingBalance = resultingBalance;
     }
 
+    public BankAccount getAccount() {
+        return account;
+    }
 
+    public void setAccount(BankAccount account) {
+        this.account = account;
+    }
 
 
 }
