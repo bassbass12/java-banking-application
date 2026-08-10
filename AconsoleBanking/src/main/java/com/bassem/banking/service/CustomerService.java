@@ -52,7 +52,7 @@ public class CustomerService
             return null;
         }
 
-        // Password check will be added here
+        // Password check
           boolean passPassword =
                   PasswordUtil.checkPassword(
                           password,customer.getPasswordHash()
