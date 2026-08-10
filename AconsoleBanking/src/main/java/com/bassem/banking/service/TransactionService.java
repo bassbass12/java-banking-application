@@ -1,6 +1,6 @@
 package com.bassem.banking.service;
 
-
+import com.bassem.banking.Customer;
 import com.bassem.banking.BankAccount;
 import com.bassem.banking.Transaction;
 import com.bassem.banking.TransactionType;
@@ -30,13 +30,25 @@ public class TransactionService {
 
     // ---------- Deposit ----------
 
-    public Transaction deposit(Long accountId, BigDecimal amount) {
+    public Transaction deposit(
+            Customer customer,
+            Long accountId,
+            BigDecimal amount) {
 
         BankAccount account = bankAccountDAO.findById(accountId);
 
         if (account == null) {
             throw new IllegalArgumentException(
                     "Bank account not found."
+            );
+        }
+
+        if (account.getOwner() == null ||
+                customer == null ||
+                !account.getOwner().getId().equals(customer.getId())) {
+
+            throw new IllegalArgumentException(
+                    "You are not authorized to access this account."
             );
         }
 
@@ -72,13 +84,25 @@ public class TransactionService {
 
     // ---------- Withdraw ----------
 
-    public Transaction withdraw(Long accountId, BigDecimal amount) {
+    public Transaction withdraw(
+            Customer customer,
+            Long accountId,
+            BigDecimal amount) {
 
         BankAccount account = bankAccountDAO.findById(accountId);
 
         if (account == null) {
             throw new IllegalArgumentException(
                     "Bank account not found."
+            );
+        }
+
+        if (account.getOwner() == null ||
+                customer == null ||
+                !account.getOwner().getId().equals(customer.getId())) {
+
+            throw new IllegalArgumentException(
+                    "You are not authorized to access this account."
             );
         }
 
@@ -121,6 +145,7 @@ public class TransactionService {
     // ---------- Transfer ----------
 
     public void transfer(
+            Customer customer,
             Long sourceAccountId,
             Long destinationAccountId,
             BigDecimal amount) {
@@ -134,6 +159,15 @@ public class TransactionService {
         if (source == null || destination == null) {
             throw new IllegalArgumentException(
                     "Source or destination account not found."
+            );
+        }
+
+        if (customer == null ||
+                source.getOwner() == null ||
+                !source.getOwner().getId().equals(customer.getId())) {
+
+            throw new IllegalArgumentException(
+                    "You are not authorized to transfer from this account."
             );
         }
 
@@ -169,12 +203,16 @@ public class TransactionService {
         BigDecimal destinationBalance =
                 destination.getBalance().add(amount);
 
+        // calculate balances
+
         source.setBalance(sourceBalance);
         destination.setBalance(destinationBalance);
 
+        // update accounts
         bankAccountDAO.update(source);
         bankAccountDAO.update(destination);
 
+        //create withdrawal transaction
         Transaction withdrawal = new Transaction();
 
         withdrawal.setAmount(amount);
@@ -183,6 +221,7 @@ public class TransactionService {
         withdrawal.setResultingBalance(sourceBalance);
         withdrawal.setAccount(source);
 
+        // create deposit transaction
         transactionDAO.save(withdrawal);
 
         Transaction deposit = new Transaction();
@@ -198,7 +237,9 @@ public class TransactionService {
 
     // ---------- Transaction History ----------
 
-    public List<Transaction> getTransactionHistory(Long accountId) {
+    public List<Transaction> getTransactionHistory(
+            Customer customer,
+            Long accountId) {
 
         BankAccount account =
                 bankAccountDAO.findById(accountId);
@@ -209,12 +250,32 @@ public class TransactionService {
             );
         }
 
+        if (customer == null ||
+                account.getOwner() == null ||
+                !account.getOwner().getId().equals(customer.getId())) {
+
+            throw new IllegalArgumentException(
+                    "You are not authorized to view this account."
+            );
+        }
+
         return transactionDAO.findByAccountId(accountId);
     }
 
+
+
     // ---------- Find Transactions By Type ----------
 
-    public List<Transaction> findByType(TransactionType type) {
+    public List<Transaction> findByType(
+            Customer customer,
+            TransactionType type) {
+
+        if (customer == null) {
+            throw new IllegalArgumentException(
+                    "Customer cannot be null."
+            );
+        }
+
 
         if (type == null) {
             throw new IllegalArgumentException(
@@ -222,12 +283,62 @@ public class TransactionService {
             );
         }
 
-        return transactionDAO.findByType(type);
+        List<Transaction> transactions =
+                transactionDAO.findByType(type);
+
+        return transactions.stream()
+                .filter(transaction ->
+                        transaction.getAccount() != null &&
+                                transaction.getAccount().getOwner() != null &&
+                                transaction.getAccount()
+                                        .getOwner()
+                                        .getId()
+                                        .equals(customer.getId())
+                )
+                .toList();
+
+
+
+
     }
     // ---------- Find Any Transaction By ID ----------
 
-    public Transaction findTransactionById(Long id) {
-        return transactionDAO.findById(id);
+    public Transaction findTransactionById(
+            Customer customer,
+            Long id) {
+
+        if (customer == null) {
+            throw new IllegalArgumentException(
+                    "Customer cannot be null."
+            );
+        }
+
+        if (id == null) {
+            throw new IllegalArgumentException(
+                    "Transaction ID cannot be null."
+            );
+        }
+
+        Transaction transaction =
+                transactionDAO.findById(id);
+
+        if (transaction == null) {
+            return null;
+        }
+
+        if (transaction.getAccount() == null ||
+                transaction.getAccount().getOwner() == null ||
+                !transaction.getAccount()
+                        .getOwner()
+                        .getId()
+                        .equals(customer.getId())) {
+
+            throw new IllegalArgumentException(
+                    "You are not authorized to view this transaction."
+            );
+        }
+
+        return transaction;
     }
 
     }

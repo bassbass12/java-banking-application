@@ -53,6 +53,8 @@ public class BankAccountService {
             );
         }
 
+        // Account has to be Active
+
         account.setStatus(AccountStatus.ACTIVE);
 
         return bankAccountDAO.save(account);

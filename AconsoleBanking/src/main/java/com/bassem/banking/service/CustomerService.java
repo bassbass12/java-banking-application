@@ -4,22 +4,43 @@ import com.bassem.banking.Customer;
 import com.bassem.banking.dao.CustomerDAO;
 
 import com.bassem.banking.PasswordUtil;
+
 import java.util.List;
 
-public class CustomerService
-{
+public class CustomerService {
 
     private final CustomerDAO customerDAO;
 
-    public CustomerService(CustomerDAO customerDAO){
-           this.customerDAO = customerDAO;
+    public CustomerService(CustomerDAO customerDAO) {
+        this.customerDAO = customerDAO;
     }
 
     // 1- ......create/register a new customer.....
 
     public void registerCustomer(Customer customer) {
 
-        //  Check if email already exists
+
+        // Validate customer
+        if (customer == null) {
+            throw new IllegalArgumentException("Customer cannot be null.");
+        }
+
+        if (customer.getName() == null ||
+                customer.getName().isBlank()) {
+            throw new IllegalArgumentException("Name cannot be blank.");
+        }
+
+        if (customer.getEmail() == null ||
+                customer.getEmail().isBlank()) {
+            throw new IllegalArgumentException("Email cannot be blank.");
+        }
+
+        if (customer.getPasswordHash() == null ||
+                customer.getPasswordHash().isBlank()) {
+            throw new IllegalArgumentException("Password cannot be blank.");
+        }
+
+        //  Check if email already exists: Duplicate
         Customer existingCustomer =
                 customerDAO.findByEmail(customer.getEmail());
 
@@ -30,6 +51,7 @@ public class CustomerService
         }
 
         //   Hash the password
+
         String hashedPassword =
                 PasswordUtil.hashPassword(customer.getPasswordHash());
 
@@ -41,7 +63,7 @@ public class CustomerService
     }
 
 
-      //2 ---------- Login Customer ----------
+    //2 ---------- Login Customer ----------
 
     public Customer login(String email, String password) {
 
@@ -53,18 +75,18 @@ public class CustomerService
         }
 
         // Password check
-          boolean passPassword =
-                  PasswordUtil.checkPassword(
-                          password,customer.getPasswordHash()
-                  );
-                  return passPassword ?  customer: null;
+        boolean passPassword =
+                PasswordUtil.checkPassword(
+                        password, customer.getPasswordHash()
+                );
+        return passPassword ? customer : null;
     }
 
     // 3 --------- Update Profile ------
 
-    public void updateProfile(Customer customer){
+    public void updateProfile(Customer customer) {
 
-              customerDAO.update(customer);
+        customerDAO.update(customer);
     }
 
     //4 --------- Find Customer By ID ----------
@@ -75,9 +97,9 @@ public class CustomerService
 
     //5 --------- Find All Customer ----------
 
-     public List<Customer> findAllCustomers(){
-        return  customerDAO.findAll();
-     }
+    public List<Customer> findAllCustomers() {
+        return customerDAO.findAll();
+    }
 
 
 }

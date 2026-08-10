@@ -249,12 +249,133 @@ public class MongoTransactionDAO implements TransactionDAO {
 
     @Override
     public List<Transaction> findByAccountId(Long accountId) {
-        return List.of();
+
+        MongoDatabase database =
+                MongoDatabaseConnection.getDatabase();
+
+        MongoCollection<Document> collection =
+                database.getCollection("transactions");
+
+        List<Transaction> transactions = new ArrayList<>();
+
+        for (Document document : collection.find(
+                new Document("accountId", accountId)
+        )) {
+
+            Transaction transaction = new Transaction();
+
+            transaction.setId(
+                    document.getLong("id")
+            );
+
+            Decimal128 amount =
+                    document.get("amount", Decimal128.class);
+
+            transaction.setAmount(
+                    amount.bigDecimalValue()
+            );
+
+            Date date =
+                    document.getDate("transaction_Date");
+
+            transaction.setDate(
+                    date.toInstant()
+                            .atZone(ZoneOffset.UTC)
+                            .toLocalDateTime()
+            );
+
+            transaction.setType(
+                    TransactionType.valueOf(
+                            document.getString("transaction_Type")
+                    )
+            );
+
+            Decimal128 resultingBalance =
+                    document.get(
+                            "resulting_Balance",
+                            Decimal128.class
+                    );
+
+            transaction.setResultingBalance(
+                    resultingBalance.bigDecimalValue()
+            );
+
+            BankAccount account = new BankAccount();
+            account.setId(accountId);
+
+            transaction.setAccount(account);
+
+            transactions.add(transaction);
+        }
+
+        return transactions;
     }
 
     @Override
     public List<Transaction> findByType(TransactionType type) {
-        return List.of();
+
+        MongoDatabase database =
+                MongoDatabaseConnection.getDatabase();
+
+        MongoCollection<Document> collection =
+                database.getCollection("transactions");
+
+        List<Transaction> transactions = new ArrayList<>();
+
+        for (Document document : collection.find(
+                new Document("transaction_Type", type.name())
+        )) {
+
+            Transaction transaction = new Transaction();
+
+            transaction.setId(
+                    document.getLong("id")
+            );
+
+            Decimal128 amount =
+                    document.get("amount", Decimal128.class);
+
+            transaction.setAmount(
+                    amount.bigDecimalValue()
+            );
+
+            Date date =
+                    document.getDate("transaction_Date");
+
+            transaction.setDate(
+                    date.toInstant()
+                            .atZone(ZoneOffset.UTC)
+                            .toLocalDateTime()
+            );
+
+            transaction.setType(
+                    TransactionType.valueOf(
+                            document.getString("transaction_Type")
+                    )
+            );
+
+            Decimal128 resultingBalance =
+                    document.get(
+                            "resulting_Balance",
+                            Decimal128.class
+                    );
+
+            transaction.setResultingBalance(
+                    resultingBalance.bigDecimalValue()
+            );
+
+            Long accountId =
+                    document.getLong("accountId");
+
+            BankAccount account = new BankAccount();
+            account.setId(accountId);
+
+            transaction.setAccount(account);
+
+            transactions.add(transaction);
+        }
+
+        return transactions;
     }
 
 }

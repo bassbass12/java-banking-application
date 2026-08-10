@@ -312,14 +312,179 @@ public class PostgresTransactionDAO implements TransactionDAO
         }
     }
 
+
+    // finds all transactions belonging to account ID
     @Override
     public List<Transaction> findByAccountId(Long accountId) {
-        return List.of();
+
+        String sql = """
+        SELECT
+            t.id,
+            t.amount,
+            t.transaction_date,
+            t.transaction_type,
+            t.resulting_balance,
+            b.id AS account_id,
+            b.account_number,
+            b.account_type,
+            b.balance,
+            b.status
+        FROM transactions t
+        JOIN bank_accounts b
+            ON t.account_id = b.id
+        WHERE t.account_id = ?
+        """;
+
+        List<Transaction> transactions = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
+
+            ps.setLong(1, accountId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+
+                while (rs.next()) {
+
+                    BankAccount account = new BankAccount();
+
+                    account.setId(rs.getLong("account_id"));
+                    account.setAccountNumber(
+                            rs.getString("account_number")
+                    );
+                    account.setAccountType(
+                            AccountType.valueOf(
+                                    rs.getString("account_type")
+                            )
+                    );
+                    account.setBalance(
+                            rs.getBigDecimal("balance")
+                    );
+                    account.setStatus(
+                            AccountStatus.valueOf(
+                                    rs.getString("status")
+                            )
+                    );
+
+                    Transaction transaction = new Transaction();
+
+                    transaction.setId(rs.getLong("id"));
+                    transaction.setAmount(
+                            rs.getBigDecimal("amount")
+                    );
+                    transaction.setDate(
+                            rs.getTimestamp("transaction_date")
+                                    .toLocalDateTime()
+                    );
+                    transaction.setType(
+                            TransactionType.valueOf(
+                                    rs.getString("transaction_type")
+                            )
+                    );
+                    transaction.setResultingBalance(
+                            rs.getBigDecimal("resulting_balance")
+                    );
+
+                    transaction.setAccount(account);
+
+                    transactions.add(transaction);
+                }
+            }
+
+            return transactions;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Error finding transactions by account", e
+            );
+        }
     }
+
 
     @Override
     public List<Transaction> findByType(TransactionType type) {
-        return List.of();
+
+        String sql = """
+        SELECT
+            t.id,
+            t.amount,
+            t.transaction_date,
+            t.transaction_type,
+            t.resulting_balance,
+            b.id AS account_id,
+            b.account_number,
+            b.account_type,
+            b.balance,
+            b.status
+        FROM transactions t
+        JOIN bank_accounts b
+            ON t.account_id = b.id
+        WHERE t.transaction_type = ?
+        """;
+
+        List<Transaction> transactions = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
+
+            ps.setString(1, type.name());
+
+            try (ResultSet rs = ps.executeQuery()) {
+
+                while (rs.next()) {
+
+                    BankAccount account = new BankAccount();
+
+                    account.setId(rs.getLong("account_id"));
+                    account.setAccountNumber(
+                            rs.getString("account_number")
+                    );
+                    account.setAccountType(
+                            AccountType.valueOf(
+                                    rs.getString("account_type")
+                            )
+                    );
+                    account.setBalance(
+                            rs.getBigDecimal("balance")
+                    );
+                    account.setStatus(
+                            AccountStatus.valueOf(
+                                    rs.getString("status")
+                            )
+                    );
+
+                    Transaction transaction = new Transaction();
+
+                    transaction.setId(rs.getLong("id"));
+                    transaction.setAmount(
+                            rs.getBigDecimal("amount")
+                    );
+                    transaction.setDate(
+                            rs.getTimestamp("transaction_date")
+                                    .toLocalDateTime()
+                    );
+                    transaction.setType(
+                            TransactionType.valueOf(
+                                    rs.getString("transaction_type")
+                            )
+                    );
+                    transaction.setResultingBalance(
+                            rs.getBigDecimal("resulting_balance")
+                    );
+
+                    transaction.setAccount(account);
+
+                    transactions.add(transaction);
+                }
+            }
+
+            return transactions;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Error finding transactions by type", e
+            );
+        }
     }
 
 
