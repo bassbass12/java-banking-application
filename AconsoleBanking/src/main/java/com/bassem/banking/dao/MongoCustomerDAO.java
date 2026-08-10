@@ -46,6 +46,30 @@ public class MongoCustomerDAO implements CustomerDAO {
     }
 
     @Override
+    public Customer findByEmail(String email) {
+        MongoDatabase Db = MongoDatabaseConnection.getDatabase();
+        MongoCollection<Document> collection =
+                Db.getCollection("customers");
+
+        Document document = collection.find(
+                new Document("email", email)
+        ).first();
+
+        if (document == null) {
+            return null;
+        }
+
+        return new Customer(
+                document.getLong("id"),
+                document.getString("name"),
+                document.getString("email"),
+                document.getString("passwordHash")
+        );
+
+
+    }
+
+    @Override
     public List<Customer> findAll() {
         MongoDatabase Db = MongoDatabaseConnection.getDatabase();
         MongoCollection<Document> collection =

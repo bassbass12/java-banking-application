@@ -9,6 +9,8 @@ public interface CustomerDAO {
 
     Customer findById(Long id);
 
+    Customer findByEmail(String email);
+
     List<Customer> findAll();
 
     void update(Customer customer);

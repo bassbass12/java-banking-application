@@ -38,6 +38,7 @@ public class PostgresCustomerDAO implements CustomerDAO {
 
     }
 
+
     @Override
     public Customer findById(Long id) {
         String sql = "SELECT * FROM customers WHERE id = ?";
@@ -69,6 +70,42 @@ public class PostgresCustomerDAO implements CustomerDAO {
             throw new RuntimeException("Error handling find customer.", e);
         }
 
+    }
+
+    // ------Find by email-----
+    @Override
+    public Customer findByEmail(String email) {
+        String sql = """
+            SELECT id, name, email, password_hash
+            FROM customers
+            WHERE email = ?
+            """;
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, email);
+
+            ResultSet resultSet = statement.executeQuery();
+
+            if (resultSet.next()) {
+
+                return new Customer(
+                        resultSet.getLong("id"),
+                        resultSet.getString("name"),
+                        resultSet.getString("email"),
+                        resultSet.getString("password_hash")
+                );
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Error finding customer by email", e
+            );
+        }
+
+
+        return null;
     }
 
     @Override
