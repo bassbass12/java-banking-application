@@ -1,25 +1,41 @@
 package com.bassem.banking;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-
+import com.bassem.banking.service.TransactionService;
 import com.bassem.banking.dao.BankAccountDAO;
 import com.bassem.banking.dao.CustomerDAO;
 import com.bassem.banking.dao.TransactionDAO;
 
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Scanner;
+
 public class Main {
+
     public static void main(String[] args) {
-        // test connection
-        try {
-            Connection connection = DatabaseConnection.getConnection();
-            System.out.println("Connected successfully!");
-            connection.close();
 
-        } catch (SQLException e) {
-            e.printStackTrace();
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.println("Choose database:");
+        System.out.println("1. PostgreSQL");
+        System.out.println("2. MongoDB");
+        System.out.print("Enter choice: ");
+
+        String choice = scanner.nextLine();
+
+        DatabaseType type;
+
+        if (choice.equals("1")) {
+            type = DatabaseType.POSTGRES;
+        } else if (choice.equals("2")) {
+            type = DatabaseType.MONGO;
+        } else {
+            System.out.println("Invalid choice.");
+            scanner.close();
+            return;
         }
-        DatabaseType type = DatabaseConfig.getDatabaseType();
 
+        System.out.println();
         System.out.println("Selected database: " + type);
 
         CustomerDAO customerDAO =
@@ -43,5 +59,175 @@ public class Main {
                 transactionDAO.getClass().getSimpleName()
         );
 
+        // ==============================================
+        // TEST DATABASE CONNECTION
+        // ==============================================
+
+        if (type == DatabaseType.MONGO) {
+
+            MongoDatabaseConnection
+                    .getDatabase()
+                    .runCommand(
+                            new org.bson.Document("ping", 1)
+                    );
+
+            System.out.println(
+                    "MongoDB connection successful!"
+            );
+        }
+
+        // ==============================================
+        // CREATE TEST CUSTOMER
+        // ==============================================
+
+        Customer customer = new Customer(
+                1001L,
+                "Test Customer",
+                "test1001@email.com",
+                "testPassword"
+        );
+
+        customerDAO.save(customer);
+
+        System.out.println(
+                "Customer saved: "
+                        + customer.getName()
+        );
+
+        // ==============================================
+        // FIND CUSTOMER
+        // ==============================================
+
+        Customer foundCustomer =
+                customerDAO.findById(1001L);
+
+        if (foundCustomer != null) {
+
+            System.out.println(
+                    "Customer found: "
+                            + foundCustomer.getName()
+            );
+        }
+
+        // ==============================================
+        // CREATE TEST ACCOUNT
+        // ==============================================
+
+        BankAccount account = new BankAccount(
+                2001L,
+                "TEST-1001",
+                AccountType.CHECKING,
+                new BigDecimal("1000.00"),
+                AccountStatus.ACTIVE,
+                customer
+        );
+
+        bankAccountDAO.save(account);
+
+        System.out.println(
+                "Bank account saved: "
+                        + account.getAccountNumber()
+        );
+
+        // ==============================================
+        // FIND ACCOUNT
+        // ==============================================
+
+        BankAccount foundAccount =
+                bankAccountDAO.findById(2001L);
+
+        if (foundAccount != null) {
+
+            System.out.println(
+                    "Bank account found: "
+                            + foundAccount.getAccountNumber()
+            );
+
+            System.out.println(
+                    "Balance: "
+                            + foundAccount.getBalance()
+            );
+        }
+
+        // ==============================================
+        // TRANSACTION SERVICE
+        // ==============================================
+
+        TransactionService transactionService =
+                new TransactionService(
+                        transactionDAO,
+                        bankAccountDAO
+                );
+
+        // ==============================================
+        // DEPOSIT
+        // ==============================================
+
+        System.out.println();
+        System.out.println("Testing deposit...");
+
+        Transaction deposit =
+                transactionService.deposit(
+                        customer,
+                        2001L,
+                        new BigDecimal("100.00")
+                );
+
+        System.out.println(
+                "Deposit successful."
+        );
+
+        System.out.println(
+                "New balance: "
+                        + deposit.getResultingBalance()
+        );
+
+        // ==============================================
+        // WITHDRAW
+        // ==============================================
+
+        System.out.println();
+        System.out.println("Testing withdrawal...");
+
+        Transaction withdrawal =
+                transactionService.withdraw(
+                        customer,
+                        2001L,
+                        new BigDecimal("50.00")
+                );
+
+        System.out.println(
+                "Withdrawal successful."
+        );
+
+        System.out.println(
+                "New balance: "
+                        + withdrawal.getResultingBalance()
+        );
+
+        // ==============================================
+        // HISTORY
+        // ==============================================
+
+        System.out.println();
+        System.out.println(
+                "Testing transaction history..."
+        );
+
+        var history =
+                transactionService.getTransactionHistory(
+                        customer,
+                        2001L
+                );
+
+        System.out.println(
+                "Transaction count: "
+                        + history.size()
+        );
+
+        System.out.println();
+        System.out.println("ALL TESTS COMPLETED.");
+
+        scanner.close();
     }
 }

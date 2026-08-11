@@ -5,8 +5,11 @@ import com.bassem.banking.AccountType;
 import com.bassem.banking.BankAccount;
 import com.bassem.banking.Customer;
 import com.bassem.banking.MongoDatabaseConnection;
+
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+
 import org.bson.Document;
 import org.bson.types.Decimal128;
 
@@ -14,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MongoBankAccountDAO implements BankAccountDAO {
-
 
     @Override
     public BankAccount save(BankAccount account) {
@@ -26,11 +28,26 @@ public class MongoBankAccountDAO implements BankAccountDAO {
                 database.getCollection("bank_accounts");
 
         Document document = new Document("id", account.getId())
-                .append("account_Number", account.getAccountNumber())
-                .append("accountType", account.getAccountType().name())
-                .append("balance", account.getBalance())
-                .append("status", account.getStatus().name())
-                .append("customerId", account.getOwner().getId());
+                .append(
+                        "account_Number",
+                        account.getAccountNumber()
+                )
+                .append(
+                        "accountType",
+                        account.getAccountType().name()
+                )
+                .append(
+                        "balance",
+                        new Decimal128(account.getBalance())
+                )
+                .append(
+                        "status",
+                        account.getStatus().name()
+                )
+                .append(
+                        "customerId",
+                        account.getOwner().getId()
+                );
 
         collection.insertOne(document);
 
@@ -55,44 +72,7 @@ public class MongoBankAccountDAO implements BankAccountDAO {
             return null;
         }
 
-        BankAccount account = new BankAccount();
-
-        account.setId(
-                document.getLong("id")
-        );
-
-        account.setAccountNumber(
-                document.getString("account_Number")
-        );
-
-        account.setAccountType(
-                AccountType.valueOf(
-                        document.getString("accountType")
-                )
-        );
-
-        account.setBalance(
-                document.get("balance", Decimal128.class)
-                        .bigDecimalValue()
-        );
-
-        account.setStatus(
-                AccountStatus.valueOf(
-                        document.getString("status")
-                )
-        );
-
-        // Get customerId from MongoDB
-        Long customerId =
-                document.getLong("customerId");
-
-        // For now, create Customer with its ID
-        Customer customer = new Customer();
-        customer.setId(customerId);
-
-        account.setOwner(customer);
-
-        return account;
+        return toBankAccount(document);
     }
 
 
@@ -105,46 +85,11 @@ public class MongoBankAccountDAO implements BankAccountDAO {
         MongoCollection<Document> collection =
                 database.getCollection("bank_accounts");
 
-        List<BankAccount> accounts = new ArrayList<>();
+        List<BankAccount> accounts =
+                new ArrayList<>();
 
         for (Document document : collection.find()) {
-
-            BankAccount account = new BankAccount();
-
-            account.setId(
-                    document.getLong("id")
-            );
-
-            account.setAccountNumber(
-                    document.getString("account_Number")
-            );
-
-            account.setAccountType(
-                    AccountType.valueOf(
-                            document.getString("accountType")
-                    )
-            );
-
-            account.setBalance(
-                    document.get("balance", Decimal128.class)
-                            .bigDecimalValue()
-            );
-
-            account.setStatus(
-                    AccountStatus.valueOf(
-                            document.getString("status")
-                    )
-            );
-
-            Long customerId =
-                    document.getLong("customerId");
-
-            Customer customer = new Customer();
-            customer.setId(customerId);
-
-            account.setOwner(customer);
-
-            accounts.add(account);
+            accounts.add(toBankAccount(document));
         }
 
         return accounts;
@@ -160,7 +105,40 @@ public class MongoBankAccountDAO implements BankAccountDAO {
         MongoCollection<Document> collection =
                 database.getCollection("bank_accounts");
 
-        Document update = new Document("$set",
+        collection.updateOne(
+                new Document("id", account.getId()),
+                createUpdate(account)
+        );
+    }
+
+
+    // =========================================================
+    // MongoDB ATOMIC TRANSACTION UPDATE
+    // =========================================================
+
+    @Override
+    public void update(
+            ClientSession session,
+            BankAccount account) {
+
+        MongoDatabase database =
+                MongoDatabaseConnection.getDatabase();
+
+        MongoCollection<Document> collection =
+                database.getCollection("bank_accounts");
+
+        collection.updateOne(
+                session,
+                new Document("id", account.getId()),
+                createUpdate(account)
+        );
+    }
+
+
+    private Document createUpdate(BankAccount account) {
+
+        return new Document(
+                "$set",
                 new Document(
                         "account_Number",
                         account.getAccountNumber()
@@ -171,7 +149,9 @@ public class MongoBankAccountDAO implements BankAccountDAO {
                         )
                         .append(
                                 "balance",
-                                account.getBalance()
+                                new Decimal128(
+                                        account.getBalance()
+                                )
                         )
                         .append(
                                 "status",
@@ -181,11 +161,6 @@ public class MongoBankAccountDAO implements BankAccountDAO {
                                 "customerId",
                                 account.getOwner().getId()
                         )
-        );
-
-        collection.updateOne(
-                new Document("id", account.getId()),
-                update
         );
     }
 
@@ -202,5 +177,55 @@ public class MongoBankAccountDAO implements BankAccountDAO {
         collection.deleteMany(
                 new Document("id", id)
         );
+    }
+
+
+    private BankAccount toBankAccount(
+            Document document) {
+
+        BankAccount account =
+                new BankAccount();
+
+        account.setId(
+                document.getLong("id")
+        );
+
+        account.setAccountNumber(
+                document.getString("account_Number")
+        );
+
+        account.setAccountType(
+                AccountType.valueOf(
+                        document.getString("accountType")
+                )
+        );
+
+        Decimal128 balance =
+                document.get(
+                        "balance",
+                        Decimal128.class
+                );
+
+        account.setBalance(
+                balance.bigDecimalValue()
+        );
+
+        account.setStatus(
+                AccountStatus.valueOf(
+                        document.getString("status")
+                )
+        );
+
+        Long customerId =
+                document.getLong("customerId");
+
+        Customer customer =
+                new Customer();
+
+        customer.setId(customerId);
+
+        account.setOwner(customer);
+
+        return account;
     }
 }

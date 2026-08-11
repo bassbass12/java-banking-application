@@ -1,41 +1,52 @@
 package com.bassem.banking.service;
 
-import com.bassem.banking.Customer;
+import com.bassem.banking.AccountStatus;
 import com.bassem.banking.BankAccount;
+import com.bassem.banking.Customer;
+import com.bassem.banking.DatabaseConnection;
+import com.bassem.banking.MongoDatabaseConnection;
 import com.bassem.banking.Transaction;
 import com.bassem.banking.TransactionType;
-import com.bassem.banking.AccountStatus;
 
 import com.bassem.banking.dao.BankAccountDAO;
 import com.bassem.banking.dao.TransactionDAO;
+import com.bassem.banking.dao.MongoBankAccountDAO;
+import com.bassem.banking.dao.MongoTransactionDAO;
+
+import com.mongodb.client.ClientSession;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
-
 
 public class TransactionService {
 
     private final TransactionDAO transactionDAO;
     private final BankAccountDAO bankAccountDAO;
 
+
     public TransactionService(
             TransactionDAO transactionDAO,
-            BankAccountDAO bankAccountDAO){
+            BankAccountDAO bankAccountDAO) {
+
         this.transactionDAO = transactionDAO;
         this.bankAccountDAO = bankAccountDAO;
     }
 
 
-
-    // ---------- Deposit ----------
+    // =========================================================
+    // DEPOSIT
+    // =========================================================
 
     public Transaction deposit(
             Customer customer,
             Long accountId,
             BigDecimal amount) {
 
-        BankAccount account = bankAccountDAO.findById(accountId);
+        BankAccount account =
+                bankAccountDAO.findById(accountId);
 
         if (account == null) {
             throw new IllegalArgumentException(
@@ -45,51 +56,153 @@ public class TransactionService {
 
         if (account.getOwner() == null ||
                 customer == null ||
-                !account.getOwner().getId().equals(customer.getId())) {
+                !account.getOwner()
+                        .getId()
+                        .equals(customer.getId())) {
 
             throw new IllegalArgumentException(
                     "You are not authorized to access this account."
             );
         }
 
-        if (account.getStatus() != AccountStatus.ACTIVE) {
+        if (account.getStatus() !=
+                AccountStatus.ACTIVE) {
+
             throw new IllegalArgumentException(
                     "Account is not active."
             );
         }
 
-        if (amount == null || amount.signum() <= 0) {
+        if (amount == null ||
+                amount.signum() <= 0) {
+
             throw new IllegalArgumentException(
                     "Deposit amount must be greater than zero."
             );
         }
 
         BigDecimal newBalance =
-                account.getBalance().add(amount);
+                account.getBalance()
+                        .add(amount);
 
         account.setBalance(newBalance);
-        bankAccountDAO.update(account);
 
-        Transaction transaction = new Transaction();
+        Transaction transaction =
+                new Transaction();
 
         transaction.setAmount(amount);
-        transaction.setDate(LocalDateTime.now());
-        transaction.setType(TransactionType.DEPOSIT);
-        transaction.setResultingBalance(newBalance);
+        transaction.setDate(
+                LocalDateTime.now()
+        );
+        transaction.setType(
+                TransactionType.DEPOSIT
+        );
+        transaction.setResultingBalance(
+                newBalance
+        );
         transaction.setAccount(account);
 
-        return transactionDAO.save(transaction);
+
+        // =====================================================
+        // MONGODB
+        // =====================================================
+
+        if (isMongo()) {
+
+            try (ClientSession session =
+                         MongoDatabaseConnection
+                                 .getClient()
+                                 .startSession()) {
+
+                try {
+
+                    session.startTransaction();
+
+                    bankAccountDAO.update(
+                            session,
+                            account
+                    );
+
+                    Transaction saved =
+                            transactionDAO.save(
+                                    session,
+                                    transaction
+                            );
+
+                    session.commitTransaction();
+
+                    return saved;
+
+                } catch (Exception e) {
+
+                    session.abortTransaction();
+
+                    throw new RuntimeException(
+                            "Deposit failed. Transaction rolled back.",
+                            e
+                    );
+                }
+            }
+        }
+
+
+        // =====================================================
+        // POSTGRESQL
+        // =====================================================
+
+        try (Connection connection =
+                     DatabaseConnection.getConnection()) {
+
+            connection.setAutoCommit(false);
+
+            try {
+
+                bankAccountDAO.update(
+                        connection,
+                        account
+                );
+
+                Transaction saved =
+                        transactionDAO.save(
+                                connection,
+                                transaction
+                        );
+
+                connection.commit();
+
+                return saved;
+
+            } catch (Exception e) {
+
+                connection.rollback();
+
+                throw new RuntimeException(
+                        "Deposit failed. Transaction rolled back.",
+                        e
+                );
+            }
+
+        } catch (SQLException e) {
+
+            throw new RuntimeException(
+                    "Database transaction error.",
+                    e
+            );
+        }
     }
 
 
-    // ---------- Withdraw ----------
+    // =========================================================
+    // WITHDRAW
+    // =========================================================
 
     public Transaction withdraw(
             Customer customer,
             Long accountId,
             BigDecimal amount) {
 
-        BankAccount account = bankAccountDAO.findById(accountId);
+        BankAccount account =
+                bankAccountDAO.findById(accountId);
 
         if (account == null) {
             throw new IllegalArgumentException(
@@ -99,50 +212,153 @@ public class TransactionService {
 
         if (account.getOwner() == null ||
                 customer == null ||
-                !account.getOwner().getId().equals(customer.getId())) {
+                !account.getOwner()
+                        .getId()
+                        .equals(customer.getId())) {
 
             throw new IllegalArgumentException(
                     "You are not authorized to access this account."
             );
         }
 
-        if (account.getStatus() != AccountStatus.ACTIVE) {
+        if (account.getStatus() !=
+                AccountStatus.ACTIVE) {
+
             throw new IllegalArgumentException(
                     "Account is not active."
             );
         }
 
-        if (amount == null || amount.signum() <= 0) {
+        if (amount == null ||
+                amount.signum() <= 0) {
+
             throw new IllegalArgumentException(
                     "Withdrawal amount must be greater than zero."
             );
         }
 
-        if (account.getBalance().compareTo(amount) < 0) {
+        if (account.getBalance()
+                .compareTo(amount) < 0) {
+
             throw new IllegalArgumentException(
                     "Insufficient balance."
             );
         }
 
         BigDecimal newBalance =
-                account.getBalance().subtract(amount);
+                account.getBalance()
+                        .subtract(amount);
 
         account.setBalance(newBalance);
-        bankAccountDAO.update(account);
 
-        Transaction transaction = new Transaction();
+        Transaction transaction =
+                new Transaction();
 
         transaction.setAmount(amount);
-        transaction.setDate(LocalDateTime.now());
-        transaction.setType(TransactionType.WITHDRAW);
-        transaction.setResultingBalance(newBalance);
+        transaction.setDate(
+                LocalDateTime.now()
+        );
+        transaction.setType(
+                TransactionType.WITHDRAW
+        );
+        transaction.setResultingBalance(
+                newBalance
+        );
         transaction.setAccount(account);
 
-        return transactionDAO.save(transaction);
+
+        // =====================================================
+        // MONGODB
+        // =====================================================
+
+        if (isMongo()) {
+
+            try (ClientSession session =
+                         MongoDatabaseConnection
+                                 .getClient()
+                                 .startSession()) {
+
+                try {
+
+                    session.startTransaction();
+
+                    bankAccountDAO.update(
+                            session,
+                            account
+                    );
+
+                    Transaction saved =
+                            transactionDAO.save(
+                                    session,
+                                    transaction
+                            );
+
+                    session.commitTransaction();
+
+                    return saved;
+
+                } catch (Exception e) {
+
+                    session.abortTransaction();
+
+                    throw new RuntimeException(
+                            "Withdrawal failed. Transaction rolled back.",
+                            e
+                    );
+                }
+            }
+        }
+
+
+        // =====================================================
+        // POSTGRESQL
+        // =====================================================
+
+        try (Connection connection =
+                     DatabaseConnection.getConnection()) {
+
+            connection.setAutoCommit(false);
+
+            try {
+
+                bankAccountDAO.update(
+                        connection,
+                        account
+                );
+
+                Transaction saved =
+                        transactionDAO.save(
+                                connection,
+                                transaction
+                        );
+
+                connection.commit();
+
+                return saved;
+
+            } catch (Exception e) {
+
+                connection.rollback();
+
+                throw new RuntimeException(
+                        "Withdrawal failed. Transaction rolled back.",
+                        e
+                );
+            }
+
+        } catch (SQLException e) {
+
+            throw new RuntimeException(
+                    "Database transaction error.",
+                    e
+            );
+        }
     }
 
 
-    // ---------- Transfer ----------
+    // =========================================================
+    // TRANSFER
+    // =========================================================
 
     public void transfer(
             Customer customer,
@@ -151,12 +367,18 @@ public class TransactionService {
             BigDecimal amount) {
 
         BankAccount source =
-                bankAccountDAO.findById(sourceAccountId);
+                bankAccountDAO.findById(
+                        sourceAccountId
+                );
 
         BankAccount destination =
-                bankAccountDAO.findById(destinationAccountId);
+                bankAccountDAO.findById(
+                        destinationAccountId
+                );
 
-        if (source == null || destination == null) {
+        if (source == null ||
+                destination == null) {
+
             throw new IllegalArgumentException(
                     "Source or destination account not found."
             );
@@ -164,78 +386,220 @@ public class TransactionService {
 
         if (customer == null ||
                 source.getOwner() == null ||
-                !source.getOwner().getId().equals(customer.getId())) {
+                !source.getOwner()
+                        .getId()
+                        .equals(customer.getId())) {
 
             throw new IllegalArgumentException(
                     "You are not authorized to transfer from this account."
             );
         }
 
-        if (source.getStatus() != AccountStatus.ACTIVE ||
-                destination.getStatus() != AccountStatus.ACTIVE) {
+        if (source.getStatus() !=
+                AccountStatus.ACTIVE ||
+                destination.getStatus() !=
+                        AccountStatus.ACTIVE) {
 
             throw new IllegalArgumentException(
                     "Both accounts must be active."
             );
         }
 
-        if (sourceAccountId.equals(destinationAccountId)) {
+        if (sourceAccountId.equals(
+                destinationAccountId)) {
+
             throw new IllegalArgumentException(
                     "Source and destination accounts must be different."
             );
         }
 
-        if (amount == null || amount.signum() <= 0) {
+        if (amount == null ||
+                amount.signum() <= 0) {
+
             throw new IllegalArgumentException(
                     "Transfer amount must be greater than zero."
             );
         }
 
-        if (source.getBalance().compareTo(amount) < 0) {
+        if (source.getBalance()
+                .compareTo(amount) < 0) {
+
             throw new IllegalArgumentException(
                     "Insufficient balance."
             );
         }
 
         BigDecimal sourceBalance =
-                source.getBalance().subtract(amount);
+                source.getBalance()
+                        .subtract(amount);
 
         BigDecimal destinationBalance =
-                destination.getBalance().add(amount);
-
-        // calculate balances
+                destination.getBalance()
+                        .add(amount);
 
         source.setBalance(sourceBalance);
         destination.setBalance(destinationBalance);
 
-        // update accounts
-        bankAccountDAO.update(source);
-        bankAccountDAO.update(destination);
 
-        //create withdrawal transaction
-        Transaction withdrawal = new Transaction();
+        // =====================================================
+        // WITHDRAWAL TRANSACTION
+        // =====================================================
+
+        Transaction withdrawal =
+                new Transaction();
 
         withdrawal.setAmount(amount);
-        withdrawal.setDate(LocalDateTime.now());
-        withdrawal.setType(TransactionType.TRANSFER);
-        withdrawal.setResultingBalance(sourceBalance);
+        withdrawal.setDate(
+                LocalDateTime.now()
+        );
+        withdrawal.setType(
+                TransactionType.TRANSFER
+        );
+        withdrawal.setResultingBalance(
+                sourceBalance
+        );
         withdrawal.setAccount(source);
 
-        // create deposit transaction
-        transactionDAO.save(withdrawal);
 
-        Transaction deposit = new Transaction();
+        // =====================================================
+        // DEPOSIT TRANSACTION
+        // =====================================================
+
+        Transaction deposit =
+                new Transaction();
 
         deposit.setAmount(amount);
-        deposit.setDate(LocalDateTime.now());
-        deposit.setType(TransactionType.TRANSFER);
-        deposit.setResultingBalance(destinationBalance);
+        deposit.setDate(
+                LocalDateTime.now()
+        );
+        deposit.setType(
+                TransactionType.TRANSFER
+        );
+        deposit.setResultingBalance(
+                destinationBalance
+        );
         deposit.setAccount(destination);
 
-        transactionDAO.save(deposit);
+
+        // =====================================================
+        // MONGODB ATOMIC TRANSFER
+        // =====================================================
+
+        if (isMongo()) {
+
+            try (ClientSession session =
+                         MongoDatabaseConnection
+                                 .getClient()
+                                 .startSession()) {
+
+                try {
+
+                    session.startTransaction();
+
+                    bankAccountDAO.update(
+                            session,
+                            source
+                    );
+
+                    bankAccountDAO.update(
+                            session,
+                            destination
+                    );
+
+                    transactionDAO.save(
+                            session,
+                            withdrawal
+                    );
+
+                    transactionDAO.save(
+                            session,
+                            deposit
+                    );
+
+                    session.commitTransaction();
+
+                } catch (Exception e) {
+
+                    session.abortTransaction();
+
+                    throw new RuntimeException(
+                            "Transfer failed. Everything was rolled back.",
+                            e
+                    );
+                }
+            }
+
+            return;
+        }
+
+
+        // =====================================================
+        // POSTGRESQL ATOMIC TRANSFER
+        // =====================================================
+
+        try (Connection connection =
+                     DatabaseConnection.getConnection()) {
+
+            connection.setAutoCommit(false);
+
+            try {
+
+                bankAccountDAO.update(
+                        connection,
+                        source
+                );
+
+                bankAccountDAO.update(
+                        connection,
+                        destination
+                );
+
+                transactionDAO.save(
+                        connection,
+                        withdrawal
+                );
+
+                transactionDAO.save(
+                        connection,
+                        deposit
+                );
+
+                connection.commit();
+
+            } catch (Exception e) {
+
+                connection.rollback();
+
+                throw new RuntimeException(
+                        "Transfer failed. Everything was rolled back.",
+                        e
+                );
+            }
+
+        } catch (SQLException e) {
+
+            throw new RuntimeException(
+                    "Database transaction error.",
+                    e
+            );
+        }
     }
 
-    // ---------- Transaction History ----------
+
+    // =========================================================
+    // CHECK DATABASE TYPE
+    // =========================================================
+
+    private boolean isMongo() {
+
+        return bankAccountDAO instanceof MongoBankAccountDAO
+                && transactionDAO instanceof MongoTransactionDAO;
+    }
+
+
+    // =========================================================
+    // TRANSACTION HISTORY
+    // =========================================================
 
     public List<Transaction> getTransactionHistory(
             Customer customer,
@@ -252,19 +616,24 @@ public class TransactionService {
 
         if (customer == null ||
                 account.getOwner() == null ||
-                !account.getOwner().getId().equals(customer.getId())) {
+                !account.getOwner()
+                        .getId()
+                        .equals(customer.getId())) {
 
             throw new IllegalArgumentException(
                     "You are not authorized to view this account."
             );
         }
 
-        return transactionDAO.findByAccountId(accountId);
+        return transactionDAO.findByAccountId(
+                accountId
+        );
     }
 
 
-
-    // ---------- Find Transactions By Type ----------
+    // =========================================================
+    // FIND TRANSACTIONS BY TYPE
+    // =========================================================
 
     public List<Transaction> findByType(
             Customer customer,
@@ -275,7 +644,6 @@ public class TransactionService {
                     "Customer cannot be null."
             );
         }
-
 
         if (type == null) {
             throw new IllegalArgumentException(
@@ -289,19 +657,22 @@ public class TransactionService {
         return transactions.stream()
                 .filter(transaction ->
                         transaction.getAccount() != null &&
-                                transaction.getAccount().getOwner() != null &&
+                                transaction.getAccount()
+                                        .getOwner() != null &&
                                 transaction.getAccount()
                                         .getOwner()
                                         .getId()
-                                        .equals(customer.getId())
+                                        .equals(
+                                                customer.getId()
+                                        )
                 )
                 .toList();
-
-
-
-
     }
-    // ---------- Find Any Transaction By ID ----------
+
+
+    // =========================================================
+    // FIND TRANSACTION BY ID
+    // =========================================================
 
     public Transaction findTransactionById(
             Customer customer,
@@ -327,7 +698,8 @@ public class TransactionService {
         }
 
         if (transaction.getAccount() == null ||
-                transaction.getAccount().getOwner() == null ||
+                transaction.getAccount()
+                        .getOwner() == null ||
                 !transaction.getAccount()
                         .getOwner()
                         .getId()
@@ -340,5 +712,4 @@ public class TransactionService {
 
         return transaction;
     }
-
-    }
+}

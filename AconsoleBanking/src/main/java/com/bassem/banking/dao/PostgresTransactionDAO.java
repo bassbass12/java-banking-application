@@ -44,6 +44,58 @@ public class PostgresTransactionDAO implements TransactionDAO
     }
 
 
+    //==========  SPECIAL.. SAVE for Atomic transaction in case
+    // one conection with update at bank_accoutDAO same connection
+    // at save transction here
+
+    @Override
+    public Transaction save(
+            Connection connection,
+            Transaction transaction) {
+
+
+
+
+        String sql = """
+            INSERT INTO transactions
+            (id, amount, transaction_date, transaction_type,
+             resulting_balance, account_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """;
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+
+            ps.setLong(1, transaction.getId());
+            ps.setBigDecimal(2, transaction.getAmount());
+            ps.setTimestamp(
+                    3,
+                    Timestamp.valueOf(transaction.getDate())
+            );
+            ps.setString(
+                    4,
+                    transaction.getType().name()
+            );
+            ps.setBigDecimal(
+                    5,
+                    transaction.getResultingBalance()
+            );
+            ps.setLong(
+                    6,
+                    transaction.getAccount().getId()
+            );
+
+            ps.executeUpdate();
+
+            return transaction;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Error saving transaction", e
+            );
+        }
+    }
+
+
     //===============================================================
 
     @Override
@@ -241,7 +293,8 @@ public class PostgresTransactionDAO implements TransactionDAO
         }
     }
 
-    //==========
+    //---------- Special Update for atomic transaction
+
 
     @Override
     public void update(Transaction transaction) {
@@ -292,7 +345,73 @@ public class PostgresTransactionDAO implements TransactionDAO
         }
     }
 
+
     //=====
+
+    // ★ CHANGE: ADD THIS METHOD
+
+    @Override
+    public void update(Connection connection,
+                       Transaction transaction) {
+
+        String sql = """
+        UPDATE transactions
+        SET amount = ?,
+            transaction_date = ?,
+            transaction_type = ?,
+            resulting_balance = ?,
+            account_id = ?
+        WHERE id = ?
+        """;
+
+        try (PreparedStatement ps =
+                     connection.prepareStatement(sql)) {
+
+            ps.setBigDecimal(
+                    1,
+                    transaction.getAmount()
+            );
+
+            ps.setTimestamp(
+                    2,
+                    java.sql.Timestamp.valueOf(
+                            transaction.getDate()
+                    )
+            );
+
+            ps.setString(
+                    3,
+                    transaction.getType().name()
+            );
+
+            ps.setBigDecimal(
+                    4,
+                    transaction.getResultingBalance()
+            );
+
+            ps.setLong(
+                    5,
+                    transaction.getAccount().getId()
+            );
+
+            ps.setLong(
+                    6,
+                    transaction.getId()
+            );
+
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+
+            throw new RuntimeException(
+                    "Error updating transaction in transaction",
+                    e
+            );
+        }
+    }
+
+
+
     @Override
     public void delete(Long id) {
 

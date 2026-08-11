@@ -15,7 +15,16 @@ public class MongoDatabaseConnection {
     private static final MongoClient mongoClient =
             MongoClients.create(CONNECTION_STRING);
 
+    private MongoDatabaseConnection() {
+    }
+
     public static MongoDatabase getDatabase() {
-        return mongoClient.getDatabase(DATABASE_NAME);
+        return mongoClient.getDatabase(
+                DATABASE_NAME
+        );
+    }
+
+    public static MongoClient getClient() {
+        return mongoClient;
     }
 }

@@ -201,6 +201,42 @@ public class PostgresBankAccountDAO implements BankAccountDAO{
 
     }
 
+
+
+    //---------- Special Update for atomic transaction
+
+    @Override
+    public void update(Connection connection, BankAccount account) {
+
+        String sql = """
+        UPDATE bank_accounts
+        SET account_number = ?,
+            account_type = ?,
+            balance = ?,
+            status = ?,
+            customer_id = ?
+        WHERE id = ?
+        """;
+
+        try (PreparedStatement ps =
+                     connection.prepareStatement(sql)) {
+
+            ps.setString(1, account.getAccountNumber());
+            ps.setString(2, account.getAccountType().name());
+            ps.setBigDecimal(3, account.getBalance());
+            ps.setString(4, account.getStatus().name());
+            ps.setLong(5, account.getOwner().getId());
+            ps.setLong(6, account.getId());
+
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Error updating bank account", e
+            );
+        }
+    }
+
     @Override
     public void delete(Long id) {
         String sql = "DELETE FROM bank_accounts WHERE id = ?";

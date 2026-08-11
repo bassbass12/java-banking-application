@@ -5,21 +5,19 @@ import com.bassem.banking.MongoDatabaseConnection;
 import com.bassem.banking.Transaction;
 import com.bassem.banking.TransactionType;
 
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 
 import org.bson.Document;
 import org.bson.types.Decimal128;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
 public class MongoTransactionDAO implements TransactionDAO {
-
 
     @Override
     public Transaction save(Transaction transaction) {
@@ -30,28 +28,82 @@ public class MongoTransactionDAO implements TransactionDAO {
         MongoCollection<Document> collection =
                 database.getCollection("transactions");
 
-        Document document = new Document("id", transaction.getId())
-                .append("amount",
-                        new Decimal128(transaction.getAmount()))
-                .append("transaction_Date",
-                        Date.from(
-                                transaction.getDate()
-                                        .toInstant(ZoneOffset.UTC)
-                        ))
-                .append("transaction_Type",
-                        transaction.getType().name())
-                .append("resulting_Balance",
-                        new Decimal128(
-                                transaction.getResultingBalance()
-                        ))
-                .append("accountId",
-                        transaction.getAccount().getId());
+        Document document =
+                createDocument(transaction);
 
         collection.insertOne(document);
 
         return transaction;
     }
 
+
+    // =========================================================
+    // MongoDB ATOMIC TRANSACTION SAVE
+    // =========================================================
+
+    @Override
+    public Transaction save(
+            ClientSession session,
+            Transaction transaction) {
+
+        MongoDatabase database =
+                MongoDatabaseConnection.getDatabase();
+
+        MongoCollection<Document> collection =
+                database.getCollection("transactions");
+
+        Document document =
+                createDocument(transaction);
+
+        collection.insertOne(
+                session,
+                document
+        );
+
+        return transaction;
+    }
+
+
+    private Document createDocument(
+            Transaction transaction) {
+
+        return new Document(
+                "id",
+                transaction.getId()
+        )
+                .append(
+                        "amount",
+                        new Decimal128(
+                                transaction.getAmount()
+                        )
+                )
+                .append(
+                        "transaction_Date",
+                        Date.from(
+                                transaction.getDate()
+                                        .toInstant(
+                                                ZoneOffset.UTC
+                                        )
+                        )
+                )
+                .append(
+                        "transaction_Type",
+                        transaction.getType().name()
+                )
+                .append(
+                        "resulting_Balance",
+                        new Decimal128(
+                                transaction
+                                        .getResultingBalance()
+                        )
+                )
+                .append(
+                        "accountId",
+                        transaction
+                                .getAccount()
+                                .getId()
+                );
+    }
 
 
     @Override
@@ -63,61 +115,16 @@ public class MongoTransactionDAO implements TransactionDAO {
         MongoCollection<Document> collection =
                 database.getCollection("transactions");
 
-        Document document = collection.find(
-                new Document("id", id)
-        ).first();
+        Document document =
+                collection.find(
+                        new Document("id", id)
+                ).first();
 
         if (document == null) {
             return null;
         }
 
-        Transaction transaction = new Transaction();
-
-        transaction.setId(
-                document.getLong("id")
-        );
-
-        Decimal128 amount =
-                document.get("amount", Decimal128.class);
-
-        transaction.setAmount(
-                amount.bigDecimalValue()
-        );
-
-        Date date =
-                document.getDate("transaction_Date");
-
-        transaction.setDate(
-                date.toInstant()
-                        .atZone(ZoneOffset.UTC)
-                        .toLocalDateTime()
-        );
-
-        transaction.setType(
-                TransactionType.valueOf(
-                        document.getString("transaction_Type")
-                )
-        );
-
-        Decimal128 resultingBalance =
-                document.get(
-                        "resulting_Balance",
-                        Decimal128.class
-                );
-
-        transaction.setResultingBalance(
-                resultingBalance.bigDecimalValue()
-        );
-
-        Long accountId =
-                document.getLong("accountId");
-
-        BankAccount account = new BankAccount();
-        account.setId(accountId);
-
-        transaction.setAccount(account);
-
-        return transaction;
+        return toTransaction(document);
     }
 
 
@@ -133,60 +140,16 @@ public class MongoTransactionDAO implements TransactionDAO {
         List<Transaction> transactions =
                 new ArrayList<>();
 
-        for (Document document : collection.find()) {
+        for (Document document :
+                collection.find()) {
 
-            Transaction transaction = new Transaction();
-
-            transaction.setId(
-                    document.getLong("id")
+            transactions.add(
+                    toTransaction(document)
             );
-
-            Decimal128 amount =
-                    document.get("amount", Decimal128.class);
-
-            transaction.setAmount(
-                    amount.bigDecimalValue()
-            );
-
-            Date date =
-                    document.getDate("transaction_Date");
-
-            transaction.setDate(
-                    date.toInstant()
-                            .atZone(ZoneOffset.UTC)
-                            .toLocalDateTime()
-            );
-
-            transaction.setType(
-                    TransactionType.valueOf(
-                            document.getString("transaction_Type")
-                    )
-            );
-
-            Decimal128 resultingBalance =
-                    document.get(
-                            "resulting_Balance",
-                            Decimal128.class
-                    );
-
-            transaction.setResultingBalance(
-                    resultingBalance.bigDecimalValue()
-            );
-
-            Long accountId =
-                    document.getLong("accountId");
-
-            BankAccount account = new BankAccount();
-            account.setId(accountId);
-
-            transaction.setAccount(account);
-
-            transactions.add(transaction);
         }
 
         return transactions;
     }
-
 
 
     @Override
@@ -198,16 +161,60 @@ public class MongoTransactionDAO implements TransactionDAO {
         MongoCollection<Document> collection =
                 database.getCollection("transactions");
 
-        Document update = new Document("$set",
+        collection.updateOne(
+                new Document(
+                        "id",
+                        transaction.getId()
+                ),
+                createUpdate(transaction)
+        );
+    }
+
+
+    // =========================================================
+    // MongoDB ATOMIC TRANSACTION UPDATE
+    // =========================================================
+
+    @Override
+    public void update(
+            ClientSession session,
+            Transaction transaction) {
+
+        MongoDatabase database =
+                MongoDatabaseConnection.getDatabase();
+
+        MongoCollection<Document> collection =
+                database.getCollection("transactions");
+
+        collection.updateOne(
+                session,
+                new Document(
+                        "id",
+                        transaction.getId()
+                ),
+                createUpdate(transaction)
+        );
+    }
+
+
+    private Document createUpdate(
+            Transaction transaction) {
+
+        return new Document(
+                "$set",
                 new Document(
                         "amount",
-                        new Decimal128(transaction.getAmount())
+                        new Decimal128(
+                                transaction.getAmount()
+                        )
                 )
                         .append(
                                 "transaction_Date",
                                 Date.from(
                                         transaction.getDate()
-                                                .toInstant(ZoneOffset.UTC)
+                                                .toInstant(
+                                                        ZoneOffset.UTC
+                                                )
                                 )
                         )
                         .append(
@@ -217,18 +224,16 @@ public class MongoTransactionDAO implements TransactionDAO {
                         .append(
                                 "resulting_Balance",
                                 new Decimal128(
-                                        transaction.getResultingBalance()
+                                        transaction
+                                                .getResultingBalance()
                                 )
                         )
                         .append(
                                 "accountId",
-                                transaction.getAccount().getId()
+                                transaction
+                                        .getAccount()
+                                        .getId()
                         )
-        );
-
-        collection.updateOne(
-                new Document("id", transaction.getId()),
-                update
         );
     }
 
@@ -247,8 +252,10 @@ public class MongoTransactionDAO implements TransactionDAO {
         );
     }
 
+
     @Override
-    public List<Transaction> findByAccountId(Long accountId) {
+    public List<Transaction> findByAccountId(
+            Long accountId) {
 
         MongoDatabase database =
                 MongoDatabaseConnection.getDatabase();
@@ -256,63 +263,29 @@ public class MongoTransactionDAO implements TransactionDAO {
         MongoCollection<Document> collection =
                 database.getCollection("transactions");
 
-        List<Transaction> transactions = new ArrayList<>();
+        List<Transaction> transactions =
+                new ArrayList<>();
 
-        for (Document document : collection.find(
-                new Document("accountId", accountId)
-        )) {
+        for (Document document :
+                collection.find(
+                        new Document(
+                                "accountId",
+                                accountId
+                        )
+                )) {
 
-            Transaction transaction = new Transaction();
-
-            transaction.setId(
-                    document.getLong("id")
+            transactions.add(
+                    toTransaction(document)
             );
-
-            Decimal128 amount =
-                    document.get("amount", Decimal128.class);
-
-            transaction.setAmount(
-                    amount.bigDecimalValue()
-            );
-
-            Date date =
-                    document.getDate("transaction_Date");
-
-            transaction.setDate(
-                    date.toInstant()
-                            .atZone(ZoneOffset.UTC)
-                            .toLocalDateTime()
-            );
-
-            transaction.setType(
-                    TransactionType.valueOf(
-                            document.getString("transaction_Type")
-                    )
-            );
-
-            Decimal128 resultingBalance =
-                    document.get(
-                            "resulting_Balance",
-                            Decimal128.class
-                    );
-
-            transaction.setResultingBalance(
-                    resultingBalance.bigDecimalValue()
-            );
-
-            BankAccount account = new BankAccount();
-            account.setId(accountId);
-
-            transaction.setAccount(account);
-
-            transactions.add(transaction);
         }
 
         return transactions;
     }
 
+
     @Override
-    public List<Transaction> findByType(TransactionType type) {
+    public List<Transaction> findByType(
+            TransactionType type) {
 
         MongoDatabase database =
                 MongoDatabaseConnection.getDatabase();
@@ -320,62 +293,85 @@ public class MongoTransactionDAO implements TransactionDAO {
         MongoCollection<Document> collection =
                 database.getCollection("transactions");
 
-        List<Transaction> transactions = new ArrayList<>();
+        List<Transaction> transactions =
+                new ArrayList<>();
 
-        for (Document document : collection.find(
-                new Document("transaction_Type", type.name())
-        )) {
+        for (Document document :
+                collection.find(
+                        new Document(
+                                "transaction_Type",
+                                type.name()
+                        )
+                )) {
 
-            Transaction transaction = new Transaction();
-
-            transaction.setId(
-                    document.getLong("id")
+            transactions.add(
+                    toTransaction(document)
             );
-
-            Decimal128 amount =
-                    document.get("amount", Decimal128.class);
-
-            transaction.setAmount(
-                    amount.bigDecimalValue()
-            );
-
-            Date date =
-                    document.getDate("transaction_Date");
-
-            transaction.setDate(
-                    date.toInstant()
-                            .atZone(ZoneOffset.UTC)
-                            .toLocalDateTime()
-            );
-
-            transaction.setType(
-                    TransactionType.valueOf(
-                            document.getString("transaction_Type")
-                    )
-            );
-
-            Decimal128 resultingBalance =
-                    document.get(
-                            "resulting_Balance",
-                            Decimal128.class
-                    );
-
-            transaction.setResultingBalance(
-                    resultingBalance.bigDecimalValue()
-            );
-
-            Long accountId =
-                    document.getLong("accountId");
-
-            BankAccount account = new BankAccount();
-            account.setId(accountId);
-
-            transaction.setAccount(account);
-
-            transactions.add(transaction);
         }
 
         return transactions;
     }
 
+
+    private Transaction toTransaction(
+            Document document) {
+
+        Transaction transaction =
+                new Transaction();
+
+        transaction.setId(
+                document.getLong("id")
+        );
+
+        Decimal128 amount =
+                document.get(
+                        "amount",
+                        Decimal128.class
+                );
+
+        transaction.setAmount(
+                amount.bigDecimalValue()
+        );
+
+        Date date =
+                document.getDate(
+                        "transaction_Date"
+                );
+
+        transaction.setDate(
+                date.toInstant()
+                        .atZone(ZoneOffset.UTC)
+                        .toLocalDateTime()
+        );
+
+        transaction.setType(
+                TransactionType.valueOf(
+                        document.getString(
+                                "transaction_Type"
+                        )
+                )
+        );
+
+        Decimal128 resultingBalance =
+                document.get(
+                        "resulting_Balance",
+                        Decimal128.class
+                );
+
+        transaction.setResultingBalance(
+                resultingBalance.bigDecimalValue()
+        );
+
+        Long accountId =
+                document.getLong("accountId");
+
+        BankAccount account =
+                new BankAccount();
+
+        account.setId(accountId);
+
+        transaction.setAccount(account);
+
+        return transaction;
+    }
 }
