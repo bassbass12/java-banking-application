@@ -7,7 +7,7 @@ import com.mongodb.client.MongoDatabase;
 public class MongoDatabaseConnection {
 
     private static final String CONNECTION_STRING =
-            "mongodb://localhost:27017";
+            "mongodb://localhost:27017/?replicaSet=rs0&retryWrites=false";
 
     private static final String DATABASE_NAME =
             "banking_db";

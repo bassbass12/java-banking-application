@@ -90,6 +90,9 @@ public class TransactionService {
         Transaction transaction =
                 new Transaction();
 
+        // fix bugs1
+        transaction.setId(System.currentTimeMillis());
+
         transaction.setAmount(amount);
         transaction.setDate(
                 LocalDateTime.now()
@@ -175,6 +178,9 @@ public class TransactionService {
             } catch (Exception e) {
 
                 connection.rollback();
+                System.out.println("Deposit Error " );
+                e.printStackTrace();
+
 
                 throw new RuntimeException(
                         "Deposit failed. Transaction rolled back.",
@@ -253,6 +259,9 @@ public class TransactionService {
 
         Transaction transaction =
                 new Transaction();
+
+        // fix withdraw by id
+        transaction.setId(System.currentTimeMillis());
 
         transaction.setAmount(amount);
         transaction.setDate(
