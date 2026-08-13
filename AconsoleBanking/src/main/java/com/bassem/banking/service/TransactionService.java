@@ -178,8 +178,7 @@ public class TransactionService {
             } catch (Exception e) {
 
                 connection.rollback();
-                System.out.println("Deposit Error " );
-                e.printStackTrace();
+
 
 
                 throw new RuntimeException(
@@ -586,9 +585,6 @@ public class TransactionService {
             } catch (Exception e) {
 
                 connection.rollback();
-
-                System.out.println("Transfer Error:");
-                e.printStackTrace();
 
 
                 throw new RuntimeException(
